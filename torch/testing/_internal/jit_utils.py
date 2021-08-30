@@ -376,7 +376,8 @@ class JitTestCase(JitCommonTestCase):
 
     def checkScriptRaisesRegex(self, script, inputs, exception, regex,
                                name=None, outputs=None, capture_output=False,
-                               frames_up=1, profiling=ProfilingMode.PROFILING):
+                               frames_up=1, profiling=ProfilingMode.PROFILING,
+                               test_python=True):
         """
         Checks that a given function will throw the correct exception,
         when executed with normal python, the string frontend, and the
@@ -385,18 +386,19 @@ class JitTestCase(JitCommonTestCase):
         """
         with enable_profiling_mode_for_profiling_tests():
             # Normal Python
-            with self.assertRaisesRegex(exception, regex):
-                if isinstance(script, str):
-                    frame = self.get_frame_vars(frames_up)
-                    the_locals: Dict[str, Any] = {}
-                    execWrapper(script, glob=frame, loc=the_locals)
-                    frame.update(the_locals)
+            if test_python:
+                with self.assertRaisesRegex(exception, regex):
+                    if isinstance(script, str):
+                        frame = self.get_frame_vars(frames_up)
+                        the_locals: Dict[str, Any] = {}
+                        execWrapper(script, glob=frame, loc=the_locals)
+                        frame.update(the_locals)
 
-                    python_fn = frame[name]
-                else:
-                    python_fn = script
+                        python_fn = frame[name]
+                    else:
+                        python_fn = script
 
-                python_fn(*inputs)
+                    python_fn(*inputs)
 
             # String frontend
             with self.assertRaisesRegex(exception, regex):
@@ -408,19 +410,12 @@ class JitTestCase(JitCommonTestCase):
                     cu = torch.jit.CompilationUnit(source, _frames_up=frames_up)
                     string_frontend = getattr(cu, script.__name__)
 
-                with self.assertRaisesRegex(exception, regex):
-                    string_frontend(*inputs)
-                # optimized run
                 string_frontend(*inputs)
 
             # Python AST frontend
             if not isinstance(script, str):
                 with self.assertRaisesRegex(exception, regex):
                     ge = torch.jit.script(python_fn)
-                    # profiling run
-                    with self.assertRaisesRegex(exception, regex):
-                        ge(*inputs)
-                    # optimized run
                     ge(*inputs)
 
     def checkBailouts(self, model, inputs, expected):
